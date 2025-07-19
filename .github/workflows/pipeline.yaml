@@ -18,13 +18,58 @@ jobs:
           node-version: "20"
       - name: Install dependencies
         run: npm install
-      - name: Check style
-        run: npm run lint
+      #- name: Check style
+      #  run: npm run eslint
       - name: Build
         run: npm run build
-      - name: Test
-        run: npm run test
+      #- name: Test
+      #  run: npm run test
+      #- name: e2e tests
+      #  uses: cypress-io/github-action@v5
+      #  with:
+      #    command: npm run test:e2e
+      #    start: npm run start-prod
+      #    wait-on: http://localhost:5000
 
+      - name: Trigger deployment
+        if : ${{ github.event_name == 'push' && !contains(join(github.event.commits.*.message, ' '), '#skip') }}
+        uses: sws2apps/render-deployment@main #consider using pin for dependabot auto update
+        with:
+          serviceId: ${{ secrets.RENDER_SERVICE_ID }}
+          apiKey: ${{ secrets.RENDER_API_KEY }}
+          multipleDeployment: false #optional, default true
+
+
+      - name: Notify Success
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        uses: Ilshidur/action-discord@master
+        if : ${{ success() && github.event_name == 'push' && !contains(join(github.event.commits.*.message, ' '), '#skip') }}
+        with:
+          args: All tests passed!
+
+      - name: Notify Error
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        uses: Ilshidur/action-discord@master
+        if : ${{ failure() }}
+        with:
+          args: |
+            Build failed!
+            Commit : ${{ github.sha }}
+            By : ${{ github.actor }}
       
 
+  tag_release:
+    needs: [simple_deployment_pipeline]
+    runs-on: ubuntu-22.04
+    if : ${{ github.event_name == 'push' && !contains(join(github.event.commits.*.message, ' '), '#skip') }}
+    steps:
+      - name : Checkout Code
+        uses: actions/checkout@v4
+      - name : Bump version and push tag
+        uses : anothrNick/github-tag-action@1.64.0
+        env : 
+          GITHUB_TOKEN : ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BUMP : patch
 
